@@ -18,6 +18,34 @@
 
 ---
 
+## 個人修改說明（`multiuser` 分支）
+
+1. **多使用者公開註冊與登入安全加固**
+   - 重構毛玻璃風格登入、註冊與密碼找回頁面（`public/login.html`、`public/css/login.css`、`public/scripts/login.js`），預設啟用隱蔽控制代碼登入（`enableDiscreetLogin: true`），不公開暴露使用者列表。
+   - 新增公開使用者註冊介面（`POST /api/users/register`），可透過 `config.yaml` 中的 `enableUserRegistration: true` 開關控制；支援使用者名稱格式校驗（`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`）、忽略大小寫防重名、路徑穿越防護（`isPathUnderParent`）及 IP 速率限制（`rateLimiting.accountsRegisterMaxAttempts`）。
+   - 內建一次性工作階段 SVG 圖形驗證碼（`GET /api/users/captcha`），用於新使用者註冊校驗並在登入失敗後自動觸發防爆破保護。
+2. **多使用者隔離、快取與外掛相容性修復**
+   - 修復角色卡磁碟快取 `DiskCache` 背景同步邏輯（`src/endpoints/characters.js`），傳入全量使用者目錄列表（`getUserDirectoriesList()`），避免單一使用者修改角色時誤清空其他線上使用者的快取。
+   - 修復第三方擴充功能靜態路由優先順序（`src/server-main.js`、`src/users.js`、`src/endpoints/extensions.js`），使單一使用者私有安裝的同名外掛正確覆蓋全域外掛，並支援遞迴建立擴充目錄。
+   - 完善新使用者初始化與帳戶重置流程（`src/endpoints/content-manager.js`、`src/endpoints/settings.js`、`src/endpoints/users-admin.js`、`src/endpoints/users-private.js`）：即使開啟 `skipContentCheck: true`，新註冊或重置的使用者仍會自動分發完整預設內容（設定、主題、角色卡、世界書、表情差分），刪除使用者時同步清理頭像鍵值與目錄快取。
+   - 增強聊天備份讀取容錯（`src/endpoints/backups.js`、`public/scripts/chat-backups.js`）：單一檔案損壞時自動跳過並提示，同時保持預設回傳標準陣列結構（透過 `X-Backup-Errors` 回應標頭傳遞異常列表），確保第三方備份外掛完全相容。
+3. **可設定社群連結、首頁公告與報錯聯繫提示（`config.yaml`）**
+   - 在 `default/config.yaml` 中新增可選設定項 `communityPrompt`（預設關閉）：
+     ```yaml
+     communityPrompt:
+       enabled: false
+       loginJumpUrl: ""
+       popupMessage: ""
+       errorContactPrompt: ""
+     ```
+   - 開啟後可分別設定：登入頁右上角外鏈跳轉按鈕（`loginJumpUrl`）、進入酒館首頁時的頂部懸浮公告彈窗（`popupMessage`）、以及連線中斷/備份異常/密碼找回時的管理員聯繫提示（`errorContactPrompt`）。
+4. **預設中文角色卡、主題、API 與效能最佳化**
+   - 在保留英文原版 `Seraphina` 的同時，預設提供中文版角色卡（`default_索菲娅.png`）、配套中文世界書（`艾尔多利亚.json`）及全套表情差分（`索菲娅/`）。
+   - 內建三套盒子主題（`盒子-浅色`、`盒子-深色`、`DefaultBoxTheme`）並支援首次啟動自動渲染生效；預設介面語言設為簡體中文（`zh-cn`），預設 API 頁面設為 OpenAI 相容介面（`custom`）。
+   - 為聊天圖片附件啟用 `loading="lazy"` 懶載入、為行動裝置軟鍵盤彈出/收起添加 `resize` 防抖以消除長對話卡頓，並在 `start.sh` 中支援指數退避自動重啟。
+
+---
+
 SillyTavern 提供一個統一的前端介面，整合多種大型語言模型的 API（包括：KoboldAI/CPP、Horde、NovelAI、Ooba、Tabby、OpenAI、OpenRouter、Claude、Mistral 等）。同時具備對行動裝置友善的佈局、視覺小說模式（Visual Novel Mode）、Automatic1111 與 ComfyUI 的影像生成 API 整合、TTS（語音合成）、世界資訊（Lorebook）、可自訂 UI、自動翻譯功能，以及強大的提示詞（prompt）設定選項和無限的第三方擴充潛力。
 
 我們擁有一個 [官方文件網站](https://docs.sillytavern.app/) 可以幫助解答絕大多數的使用問題，並幫助您順利入門。

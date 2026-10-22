@@ -15,6 +15,34 @@ English | [German](readme-de_de.md) | [中文](readme-zh_cn.md) | [繁體中文]
 
 ---
 
+## Personal Modifications (`multiuser` Branch)
+
+1. **Multi-User Public Registration & Login Hardening**
+   - Redesigned glassmorphic login, registration, and password recovery UI (`public/login.html`, `public/css/login.css`, `public/scripts/login.js`), defaulting to discreet handle login (`enableDiscreetLogin: true`) so the user list is never publicly exposed.
+   - Added public self-registration (`POST /api/users/register`), configurable via `enableUserRegistration: true` in `config.yaml`, with handle format validation (`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`), case-insensitive duplicate checks, path traversal protection (`isPathUnderParent`), and IP rate limiting (`rateLimiting.accountsRegisterMaxAttempts`).
+   - Built-in single-use SVG CAPTCHA verification (`GET /api/users/captcha`) required for registration and automatically triggered after login failures.
+2. **Multi-User Isolation, Cache & Plugin Compatibility Fixes**
+   - Fixed character `DiskCache` background synchronization (`src/endpoints/characters.js`) so background verification checks all user directories (`getUserDirectoriesList()`) rather than evicting other users' cached character cards.
+   - Fixed third-party extension static routing (`src/server-main.js`, `src/users.js`, `src/endpoints/extensions.js`) so user-local extensions take precedence over global extensions of the same name and create directories recursively.
+   - Ensured newly created, registered, or reset accounts always seed full default content (`settings.json`, themes, characters, lorebooks, sprites) even when `skipContentCheck: true` is enabled, and cleaned up avatar keys and directory caches on user deletion.
+   - Isolated corrupted `.jsonl` chat backup files (`src/endpoints/backups.js`, `public/scripts/chat-backups.js`) while preserving the standard JSON array response for third-party plugin compatibility (passing skipped files via the `X-Backup-Errors` header).
+3. **Configurable Community Links & Admin Prompts (`config.yaml`)**
+   - Added an optional `communityPrompt` block in `default/config.yaml` (disabled by default):
+     ```yaml
+     communityPrompt:
+       enabled: false
+       loginJumpUrl: ""
+       popupMessage: ""
+       errorContactPrompt: ""
+     ```
+   - Supports an optional external link button on the login screen (`loginJumpUrl`), a welcome banner toast on the home page (`popupMessage`), and an administrator contact prompt appended to connection, backup, and password recovery error messages (`errorContactPrompt`).
+4. **Default Content, Themes, API & Performance Tweaks**
+   - Included a Simplified Chinese default character card (`default_索菲娅.png`), matching lorebook (`艾尔多利亚.json`), and expression sprites (`索菲娅/`) alongside the English Seraphina card.
+   - Added custom box themes (`盒子-浅色`, `盒子-深色`, `DefaultBoxTheme`) with automatic first-run theme initialization, default `zh-cn` locale, and OpenAI-compatible (`custom`) default API view.
+   - Added `loading="lazy"` for chat media attachments, debounced mobile keyboard resize reflows, and exponential backoff auto-restart in `start.sh`.
+
+---
+
 SillyTavern provides a single unified interface for many LLM APIs (KoboldAI/CPP, Horde, NovelAI, Ooba, Tabby, OpenAI, OpenRouter, Claude, Mistral and more), a mobile-friendly layout, Visual Novel Mode, Automatic1111 & ComfyUI API image generation integration, TTS, WorldInfo (lorebooks), customizable UI, auto-translate, more prompt options than you'd ever want or need, and endless growth potential via third-party extensions.
 
 We have a [Documentation website](https://docs.sillytavern.app/) to answer most of your questions and help you get started.

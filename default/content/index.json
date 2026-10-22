@@ -4,6 +4,18 @@
         "type": "settings"
     },
     {
+        "filename": "themes/双色盒子-浅色.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/双色盒子-深色.json",
+        "type": "theme"
+    },
+    {
+        "filename": "themes/DefaultBoxTheme.json",
+        "type": "theme"
+    },
+    {
         "filename": "themes/Dark Lite.json",
         "type": "theme"
     },
@@ -125,6 +137,18 @@
     },
     {
         "filename": "Eldoria.json",
+        "type": "world"
+    },
+    {
+        "filename": "default_索菲娅.png",
+        "type": "character"
+    },
+    {
+        "filename": "索菲娅",
+        "type": "sprites"
+    },
+    {
+        "filename": "艾尔多利亚.json",
         "type": "world"
     },
     {

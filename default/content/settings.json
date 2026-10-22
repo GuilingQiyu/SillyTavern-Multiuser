@@ -6,7 +6,7 @@
     "user_avatar": "user-default.png",
     "amount_gen": 350,
     "max_context": 8192,
-    "main_api": "koboldhorde",
+    "main_api": "openai",
     "world_info_settings": {
         "world_info": {
             "globalSelect": []
@@ -125,7 +125,7 @@
         "movingUIState": {},
         "movingUIPreset": "Default",
         "noShadows": true,
-        "theme": "Dark Lite",
+        "theme": "DefaultBoxTheme",
         "auto_swipe": false,
         "auto_swipe_minimum_length": 0,
         "auto_swipe_blacklist": [],
@@ -149,6 +149,8 @@
         "continue_on_send": false,
         "trim_spaces": true,
         "relaxed_api_urls": false,
+        "auto_connect": true,
+        "auto_load_chat": false,
         "instruct": {
             "enabled": false,
             "preset": "Alpaca",
@@ -626,7 +628,7 @@
         "ai21_model": "jamba-large",
         "openrouter_model": "OR_Website",
         "reverse_proxy": "",
-        "chat_completion_source": "openai",
+        "chat_completion_source": "custom",
         "max_context_unlocked": false,
         "api_url_scale": "",
         "show_external_models": false,

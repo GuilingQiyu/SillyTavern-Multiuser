@@ -18,6 +18,34 @@
 
 ---
 
+## 个人修改说明（`multiuser` 分支）
+
+1. **多用户公开注册与登录安全加固**
+   - 重构毛玻璃风格登录、注册与密码找回页面（`public/login.html`、`public/css/login.css`、`public/scripts/login.js`），默认启用隐蔽句柄登录（`enableDiscreetLogin: true`），不公开暴露用户列表。
+   - 新增公开用户注册接口（`POST /api/users/register`），可通过 `config.yaml` 中的 `enableUserRegistration: true` 开关控制；支持用户名格式校验（`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`）、忽略大小写防重名、路径穿越防护（`isPathUnderParent`）及 IP 速率限制（`rateLimiting.accountsRegisterMaxAttempts`）。
+   - 内置一次性会话 SVG 图形验证码（`GET /api/users/captcha`），用于新用户注册校验并在登录失败后自动触发防爆破保护。
+2. **多用户隔离、缓存与插件兼容性修复**
+   - 修复角色卡磁盘缓存 `DiskCache` 后台同步逻辑（`src/endpoints/characters.js`），传入全量用户目录列表（`getUserDirectoriesList()`），避免单用户修改角色时误清空其他在线用户的缓存。
+   - 修复第三方扩展静态路由优先级（`src/server-main.js`、`src/users.js`、`src/endpoints/extensions.js`），使单用户私有安装的同名插件正确覆盖全局插件，并支持递归创建扩展目录。
+   - 完善新用户初始化与账户重置流程（`src/endpoints/content-manager.js`、`src/endpoints/settings.js`、`src/endpoints/users-admin.js`、`src/endpoints/users-private.js`）：即使开启 `skipContentCheck: true`，新注册或重置的用户仍会自动分发完整默认内容（设置、主题、角色卡、世界书、表情差分），删除用户时同步清理头像键值与目录缓存。
+   - 增强聊天备份读取容错（`src/endpoints/backups.js`、`public/scripts/chat-backups.js`）：单文件损坏时自动跳过并提示，同时保持默认返回标准数组结构（通过 `X-Backup-Errors` 响应头传递异常列表），确保第三方备份插件完全兼容。
+3. **可配置社群链接、主页公告与报错联系提示（`config.yaml`）**
+   - 在 `default/config.yaml` 中新增可选配置项 `communityPrompt`（默认关闭）：
+     ```yaml
+     communityPrompt:
+       enabled: false
+       loginJumpUrl: ""
+       popupMessage: ""
+       errorContactPrompt: ""
+     ```
+   - 开启后可分别配置：登录页右上角外链跳转按钮（`loginJumpUrl`）、进入酒馆主页时的顶部悬浮公告弹窗（`popupMessage`）、以及连接断开/备份异常/密码找回时的管理员联系提示（`errorContactPrompt`）。
+4. **默认中文角色卡、主题、API 与性能优化**
+   - 在保留英文原版 `Seraphina` 的同时，默认提供中文版角色卡（`default_索菲娅.png`）、配套中文世界书（`艾尔多利亚.json`）及全套表情差分（`索菲娅/`）。
+   - 内置三套盒子主题（`盒子-浅色`、`盒子-深色`、`DefaultBoxTheme`）并支持首次启动自动渲染生效；默认界面语言设为简体中文（`zh-cn`），默认 API 页面设为 OpenAI 兼容接口（`custom`）。
+   - 为聊天图片附件启用 `loading="lazy"` 懒加载、为移动端软键盘弹出/收起添加 `resize` 防抖以消除长对话卡顿，并在 `start.sh` 中支持指数退避自动重启。
+
+---
+
 SillyTavern 为众多 LLM API（KoboldAI/CPP、Horde、NovelAI、Ooba、Tabby、OpenAI、OpenRouter、Claude、Mistral 等）提供统一界面，拥有移动设备友好的布局、视觉小说模式、Automatic1111 & ComfyUI API 图像生成集成、TTS、世界书（lorebooks）、可自定义的 UI、自动翻译、超乎您想象的丰富 Prompt 选项，以及通过第三方扩展实现的无限增长潜力。
 
 我们有一个[文档网站](https://docs.sillytavern.app/)来回答您的大部分问题并帮助您入门。
