@@ -12,8 +12,10 @@ import {
     getAllUserHandles,
     getPasswordSalt,
     getPasswordHash,
+    toAvatarKey,
     getUserDirectories,
-    ensurePublicDirectoriesExist,
+    ensureUserDirectoriesExist,
+    removeUserDirectoriesCache,
 } from '../users.js';
 import { DEFAULT_USER } from '../constants.js';
 
@@ -184,9 +186,9 @@ router.post('/create', requireAdminMiddleware, async (request, response) => {
             return response.status(400).json({ error: 'Invalid handle' });
         }
 
-        if (handles.some(x => x === handle)) {
+        if (handles.some(x => x.toLowerCase() === handle.toLowerCase())) {
             console.warn('Create user failed: User with that handle already exists');
-            return response.status(409).json({ error: 'User already exists' });
+            return response.status(409).json({ error: '用户已存在！' });
         }
 
         const salt = getPasswordSalt();
@@ -206,9 +208,8 @@ router.post('/create', requireAdminMiddleware, async (request, response) => {
 
         // Create user directories
         console.info('Creating data directories for', newUser.handle);
-        await ensurePublicDirectoriesExist();
-        const directories = getUserDirectories(newUser.handle);
-        await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS]);
+        const directories = ensureUserDirectoriesExist(newUser.handle);
+        await checkForNewContent([directories], [CONTENT_TYPES.SETTINGS, CONTENT_TYPES.THEME, CONTENT_TYPES.CHARACTER, CONTENT_TYPES.WORLD, CONTENT_TYPES.SPRITES]);
         return response.json({ handle: newUser.handle });
     } catch (error) {
         console.error('User create failed:', error);
@@ -234,6 +235,8 @@ router.post('/delete', requireAdminMiddleware, async (request, response) => {
         }
 
         await storage.removeItem(toKey(request.body.handle));
+        await storage.removeItem(toAvatarKey(request.body.handle));
+        removeUserDirectoriesCache(request.body.handle);
 
         if (request.body.purge) {
             const directories = getUserDirectories(request.body.handle);

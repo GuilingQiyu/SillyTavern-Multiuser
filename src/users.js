@@ -130,6 +130,36 @@ export async function ensurePublicDirectoriesExist() {
 }
 
 /**
+ * Ensures that the directories for a specific user (and public directories) exist.
+ * @param {string} handle User handle
+ * @returns {UserDirectoryList} - The user's directories
+ */
+export function ensureUserDirectoriesExist(handle) {
+    for (const dir of Object.values(PUBLIC_DIRECTORIES)) {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    }
+
+    const userDirectories = getUserDirectories(handle);
+    for (const dir of Object.values(userDirectories)) {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    }
+    return userDirectories;
+}
+
+/**
+ * Removes cached directories for a user handle.
+ * @param {string} handle User handle
+ * @returns {void}
+ */
+export function removeUserDirectoriesCache(handle) {
+    DIRECTORIES_CACHE.delete(handle);
+}
+
+/**
  * Prints an error message and exits the process if necessary
  * @param {string} message The error message to print
  * @returns {void}
@@ -642,7 +672,7 @@ export function getSessionCookieAge() {
  * @returns {string} Hashed password
  */
 export function getPasswordHash(password, salt) {
-    return crypto.scryptSync(password.normalize(), salt, 64).toString('base64');
+    return crypto.scryptSync(String(password ?? '').normalize(), String(salt ?? ''), 64).toString('base64');
 }
 
 /**
@@ -982,11 +1012,17 @@ export async function setUserDataMiddleware(request, response, next) {
 
     if (!user) {
         console.error('User not found:', handle);
+        request.session.handle = null;
+        request.session.csrfToken = null;
+        request.session.version = null;
         return next();
     }
 
     if (!user.enabled) {
         console.error('User is disabled:', handle);
+        request.session.handle = null;
+        request.session.csrfToken = null;
+        request.session.version = null;
         return next();
     }
 
@@ -997,6 +1033,9 @@ export async function setUserDataMiddleware(request, response, next) {
             request.session.csrfToken = null;
             request.session.version = null;
             request.session = null;
+            if (request.method === 'GET' && (request.path === '/' || request.path === '/login')) {
+                return next();
+            }
             return response.sendStatus(403);
         }
     } else {
@@ -1100,6 +1139,7 @@ function createExtensionsRouteHandler(directoryFn) {
             }
             const existsLocal = fs.existsSync(localPath);
             if (existsLocal) {
+                invalidateFirefoxCache(filePath, req, res);
                 return res.sendFile(filePath, { root: directory });
             }
 
@@ -1109,6 +1149,7 @@ function createExtensionsRouteHandler(directoryFn) {
             }
             const existsGlobal = fs.existsSync(globalPath);
             if (existsGlobal) {
+                invalidateFirefoxCache(filePath, req, res);
                 return res.sendFile(filePath, { root: PUBLIC_DIRECTORIES.globalExtensions });
             }
 
@@ -1193,7 +1234,7 @@ async function getAllUsers() {
     /**
      * @type {User[]}
      */
-    const users = await storage.values();
+    const users = await storage.values(x => x.key.startsWith(KEY_PREFIX));
     return users;
 }
 

@@ -107,6 +107,18 @@ requestProxy:
 enableUserAccounts: false
 # Enable discreet login mode: hides user list on the login screen
 enableDiscreetLogin: false
+# Allow public user registration on the login screen when user accounts are enabled
+enableUserRegistration: true
+# Optional custom community link and prompt messages for multi-user deployment
+communityPrompt:
+  # Toggle switch to enable or disable custom community link and prompts
+  enabled: false
+  # 1. Jump URL displayed on the login page (leave empty to hide the jump link)
+  loginJumpUrl: ""
+  # 2. Welcome popup toast message shown on the home page after loading settings (leave empty to disable the popup)
+  popupMessage: ""
+  # 3. Error & recovery contact prompt shown on save/backup errors and password recovery (leave empty to hide)
+  errorContactPrompt: ""
 # If `basicAuthMode` and this are enabled then
 # the username and passwords for basic auth are the same as those
 # for the individual accounts

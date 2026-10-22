@@ -230,7 +230,7 @@ import {
     formatInstructModeStoryString,
     getInstructStoppingSequences,
 } from './scripts/instruct-mode.js';
-import { initLocales, t } from './scripts/i18n.js';
+import { initLocales, setErrorContactPrompt, t } from './scripts/i18n.js';
 import { getFriendlyTokenizerName, getTokenCount, getTokenCountAsync, initTokenizers, saveTokenCache } from './scripts/tokenizers.js';
 import {
     user_avatar,
@@ -277,6 +277,33 @@ import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPro
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
+
+let communityPromptConfig = {
+    enabled: false,
+    loginJumpUrl: '',
+    popupMessage: '',
+    errorContactPrompt: '',
+};
+
+// 在设置加载完成后，如果开启了弹窗提示且配置了内容，在酒馆主页显示顶部蓝色悬浮气泡
+eventSource.on(event_types.SETTINGS_LOADED, async () => {
+    try {
+        const path = window.location.pathname || '/';
+        if ((path === '/' || path === '/index.html') && communityPromptConfig?.enabled && communityPromptConfig?.popupMessage) {
+            toastr.info(communityPromptConfig.popupMessage, null, {
+                timeOut: 12000,
+                extendedTimeOut: 2000,
+                closeButton: true,
+                tapToDismiss: true,
+                escapeHtml: false,
+                positionClass: 'toast-top-center',
+            });
+        }
+    } catch (err) {
+        console.error('Welcome toast failed', err);
+    }
+});
+
 import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
@@ -2262,6 +2289,7 @@ export function appendMediaToMessage(mes, messageElement, scrollBehavior = SCROL
 
         const image = template.find('.mes_img');
         image.attr('src', attachment.url);
+        image.attr('loading', 'lazy');
         image.attr('title', attachment.title || mes.extra.title || '');
         mediaPromises.push(new Promise((resolve) => {
             function onLoad() {
@@ -7934,6 +7962,10 @@ export async function getSettings(initLoaderHandle = null) {
 
         accountStorage.init(settings?.accountStorage);
         await setUserControls(data.enable_accounts);
+        if (data.community_prompt && typeof data.community_prompt === 'object') {
+            communityPromptConfig = data.community_prompt;
+            setErrorContactPrompt(communityPromptConfig.enabled ? communityPromptConfig.errorContactPrompt : '');
+        }
         setRequestCompressionConfig(data.request_compression);
 
         // Allow subscribers to mutate settings

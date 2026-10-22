@@ -14,6 +14,24 @@ let trackMissingDynamicTranslate = null;
 
 export const getCurrentLocale = () => localeFile;
 
+let errorContactPromptText = '';
+
+/**
+ * Sets an optional contact prompt suffix appended to connection/save error messages.
+ * @param {string} prompt Contact prompt string
+ */
+export function setErrorContactPrompt(prompt) {
+    errorContactPromptText = String(prompt ?? '').trim();
+}
+
+/**
+ * Gets the currently configured error contact prompt string.
+ * @returns {string}
+ */
+export function getErrorContactPrompt() {
+    return errorContactPromptText;
+}
+
 /**
  * Adds additional localization data to the current locale file.
  * @param {string} localeId Locale ID (e.g. 'fr-fr' or 'zh-cn')
@@ -107,7 +125,12 @@ export function translate(text, key = null) {
     if (trackMissingDynamicTranslate && localeData && !Object.hasOwn(localeData, translationKey)) {
         trackMissingDynamicTranslate.add(translationKey);
     }
-    return localeData?.[translationKey] || text;
+    const baseText = localeData?.[translationKey] || text;
+    if (errorContactPromptText && translationKey === 'Check the server connection and reload the page to prevent data loss.') {
+        return `${baseText}
+${errorContactPromptText}`;
+    }
+    return baseText;
 }
 
 /**

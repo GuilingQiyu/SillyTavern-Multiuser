@@ -6,7 +6,7 @@ import storage from 'node-persist';
 import express from 'express';
 import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
 
-import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensurePublicDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
+import { getUserAvatar, toKey, getPasswordHash, getPasswordSalt, createBackupArchive, ensureUserDirectoriesExist, toAvatarKey, getAccountVersion } from '../users.js';
 import { SETTINGS_FILE } from '../constants.js';
 import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
 import { color, Cache, getConfigValue } from '../util.js';
@@ -288,8 +288,8 @@ router.post('/reset-step2', async (request, response) => {
         console.info('Resetting account data:', request.user.profile.handle);
         await fsPromises.rm(request.user.directories.root, { recursive: true, force: true });
 
-        await ensurePublicDirectoriesExist();
-        await checkForNewContent([request.user.directories]);
+        ensureUserDirectoriesExist(request.user.profile.handle);
+        await checkForNewContent([request.user.directories], [CONTENT_TYPES.SETTINGS, CONTENT_TYPES.THEME, CONTENT_TYPES.CHARACTER, CONTENT_TYPES.WORLD, CONTENT_TYPES.SPRITES]);
 
         await resetLimiter.delete(ip);
         RESET_CACHE.remove(request.user.profile.handle);

@@ -42,36 +42,65 @@
                     <div id="userSelectBlock" class="flex-container flexFlowColumn alignItemsCenter">
                         <h2 id="logoBlock" class="flex-container">
                             <img src="img/logo.png" alt="SillyTavern" class="logo">
-                            <span>Welcome to SillyTavern</span>
+                            <span>欢迎来到AI酒馆</span>
                         </h2>
-                        <h3 id="normalLoginPrompt">
-                            Select an Account
+                        <h3 id="normalLoginPrompt" style="display:none;">
+                            选择一个账户
                         </h3>
                         <h3 id="discreetLoginPrompt">
-                            Enter Login Details
+                            使用用户句柄登录
                         </h3>
                         <div id="userListBlock" class="wide100p">
-                            <div id="userList" class="flex-container justifySpaceEvenly"></div>
+                            <div id="userList" style="display:none;" class="flex-container justifySpaceEvenly"></div>
                             <div id="handleEntryBlock" style="display:none;" class="flex-container flexFlowColumn alignItemsCenter">
-                                <input id="userHandle" class="text_pole" type="text" placeholder="User handle" autocomplete="username">
+                                <input id="userHandle" class="text_pole" type="text" placeholder="用户句柄(用户名)" autocomplete="username">
                             </div>
                             <div id="passwordEntryBlock" style="display:none;"
                                 class="flex-container flexFlowColumn alignItemsCenter">
-                                <input id="userPassword" class="text_pole" type="password" placeholder="Password" autocomplete="current-password">
-                                <a id="recoverPassword" href="#" onclick="return false;">Forgot password?</a>
+                                <input id="userPassword" class="text_pole" type="password" placeholder="密码" autocomplete="current-password">
+
+                                <div id="loginCaptchaBlock" style="display:none;" class="flex-container flexFlowColumn alignItemsCenter wide100p">
+                                    <div class="flex-container alignItemsCenter justifyCenter flexGap10 wide100p">
+                                        <input id="loginCaptcha" class="text_pole" type="text" placeholder="验证码" style="width: 50%;" autocomplete="off">
+                                        <img id="loginCaptchaImage" src="" alt="Captcha" style="cursor: pointer; height: 40px; border-radius: 4px;" title="点击刷新验证码">
+                                    </div>
+                                </div>
+
+                                <a id="recoverPassword" href="#" onclick="return false;">密码忘了?</a>
+                                <a id="communityJumpLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">加入社群</a>
                                 <div class="flex-container">
-                                    <div id="loginButton" class="menu_button">Login</div>
+                                    <div id="loginButton" class="menu_button" style="white-space: nowrap;">登录</div>
+                                </div>
+                                <div id="showRegisterContainer" class="flex-container" style="margin-top: 10px;">
+                                    <a id="showRegister" href="#" onclick="return false;">创建账户</a>
                                 </div>
                             </div>
+
+                            <div id="registerBlock" style="display:none;" class="flex-container flexFlowColumn alignItemsCenter">
+                                <input id="regHandle" class="text_pole" type="text" placeholder="输入用户句柄(用户名)" autocomplete="username">
+                                <input id="regPassword" class="text_pole" type="password" placeholder="新密码" autocomplete="new-password">
+                                <input id="regPasswordConfirm" class="text_pole" type="password" placeholder="重复密码" autocomplete="new-password">
+
+                                <div class="flex-container alignItemsCenter justifyCenter flexGap10 wide100p">
+                                    <input id="regCaptcha" class="text_pole" type="text" placeholder="验证码" style="width: 50%;" autocomplete="off">
+                                    <img id="regCaptchaImage" src="" alt="Captcha" style="cursor: pointer; height: 40px; border-radius: 4px;" title="点击刷新验证码">
+                                </div>
+
+                                <div class="flex-container flexGap10">
+                                    <div id="registerButton" class="menu_button" style="white-space: nowrap;">注册</div>
+                                    <div id="cancelRegister" class="menu_button" style="white-space: nowrap;">取消</div>
+                                </div>
+                            </div>
+
                             <div id="passwordRecoveryBlock" style="display:none;" class="flex-container flexFlowColumn alignItemsCenter">
                                 <div id="recoverMessage">
-                                    Recovery code has been posted to the server console.
+                                    目前仅支持管理员协助恢复，请向管理员索要恢复码
                                 </div>
-                                <input id="recoveryCode" class="text_pole" type="text" placeholder="Recovery code">
-                                <input id="newPassword" class="text_pole" type="password" placeholder="New password" autocomplete="new-password">
+                                <input id="recoveryCode" class="text_pole" type="text" placeholder="恢复码" autocomplete="one-time-code">
+                                <input id="newPassword" class="text_pole" type="password" placeholder="新密码" autocomplete="new-password">
                                 <div class="flex-container flexGap10">
-                                    <div id="sendRecovery" class="menu_button">Send</div>
-                                    <div id="cancelRecovery" class="menu_button">Cancel</div>
+                                    <div id="sendRecovery" class="menu_button">完成恢复</div>
+                                    <div id="cancelRecovery" class="menu_button">取消</div>
                                 </div>
                             </div>
                         </div>
