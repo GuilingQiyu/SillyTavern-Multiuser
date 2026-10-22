@@ -20,7 +20,7 @@ import { parse, read, write } from '../character-card-parser.js';
 import { readWorldInfoFile } from './worldinfo.js';
 import { invalidateThumbnail } from './thumbnails.js';
 import { importRisuSprites } from './sprites.js';
-import { getUserDirectories } from '../users.js';
+import { getUserDirectoriesList } from '../users.js';
 import { getChatInfo } from './chats.js';
 import { ByafParser } from '../byaf.js';
 import { CharXParser, persistCharXAssets } from '../charx.js';
@@ -87,8 +87,8 @@ class DiskCache {
                 return;
             }
 
-            const directories = [...this.syncQueue].map(entry => getUserDirectories(entry));
             this.syncQueue.clear();
+            const directories = await getUserDirectoriesList();
 
             await this.verify(directories);
         } catch (error) {

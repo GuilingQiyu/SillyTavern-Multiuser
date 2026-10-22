@@ -84,7 +84,17 @@ function applyBrowserFixes() {
             document.documentElement.style.position = 'fixed';
             requestAnimationFrame(() => document.documentElement.style.position = '');
         };
-        window.addEventListener('resize', fixFunkyPositioning);
+        // 键盘弹出/收起动画期间 resize 会连续触发多次，每次该 hack 都强制两次全文档重排，
+        // 在长对话下造成明显卡顿。用防抖把这一连串事件合并成结束后的一次重排。
+        let funkyTimer = null;
+        const debouncedFixFunkyPositioning = () => {
+            if (funkyTimer) {
+                clearTimeout(funkyTimer);
+            }
+            funkyTimer = setTimeout(fixFunkyPositioning, 100);
+        };
+        window.addEventListener('resize', debouncedFixFunkyPositioning);
+        // 旋转屏幕是一次性事件，保持立即响应
         window.addEventListener('orientationchange', fixFunkyPositioning);
     }
 

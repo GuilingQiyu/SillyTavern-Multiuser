@@ -1,4 +1,4 @@
-import { t } from './i18n.js';
+import { getErrorContactPrompt, t } from './i18n.js';
 import { callGenericPopup, Popup, POPUP_TYPE } from './popup.js';
 import { getFileExtension, sortMoments, timestampToMoment } from './utils.js';
 import { displayPastChats, getRequestHeaders, importCharacterChat } from '/script.js';
@@ -159,13 +159,32 @@ class BackupsBrowser {
             signal,
         });
 
+        const contactHint = getErrorContactPrompt();
+        const contactSuffix = contactHint ? `（${contactHint}）` : '';
+
         if (!response.ok) {
             console.error('Failed to load chat backups list:', response.statusText);
+            toastr.error(`${t`无法加载聊天备份列表。`}${contactSuffix}`, t`备份加载失败`);
             return;
         }
 
+        const payload = await response.json();
         /** @type {import('../../src/endpoints/chats.js').ChatInfo[]} */
-        const backupsList = await response.json();
+        const backupsList = Array.isArray(payload) ? payload : (payload?.backups ?? []);
+        let errors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const errorsHeader = response.headers.get('X-Backup-Errors');
+        if (!errors.length && errorsHeader) {
+            try {
+                errors = JSON.parse(decodeURIComponent(errorsHeader));
+            } catch {
+                // ignore malformed header
+            }
+        }
+
+        if (errors?.length) {
+            console.error('[备份] 以下文件无法读取：', errors);
+            toastr.error(`${t`${errors.length} 个备份文件无法读取，已跳过。`}${contactSuffix}`, t`备份读取失败`);
+        }
 
         for (const backup of backupsList.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)))) {
             const listItem = document.createElement('div');

@@ -9,17 +9,37 @@ export const router = express.Router();
 router.post('/chat/get', async (request, response) => {
     try {
         const backupModels = [];
+        const errors = [];
+
+        if (!fs.existsSync(request.user.directories.backups)) {
+            return response.json(request.body?.withErrors ? { backups: [], errors: [] } : []);
+        }
+
         const backupFiles = await fsPromises
             .readdir(request.user.directories.backups, { withFileTypes: true })
             .then(d => d.filter(d => d.isFile() && path.extname(d.name) === '.jsonl' && d.name.startsWith(CHAT_BACKUPS_PREFIX)).map(d => d.name));
 
         for (const name of backupFiles) {
             const filePath = path.join(request.user.directories.backups, name);
-            const info = await getChatInfo(filePath);
-            if (!info || !info.file_name) {
-                continue;
+            try {
+                const info = await getChatInfo(filePath);
+                if (!info || !info.file_name) {
+                    errors.push(name);
+                    continue;
+                }
+                backupModels.push(info);
+            } catch (fileError) {
+                console.error(`[Backups] Failed to read backup file ${name}:`, fileError);
+                errors.push(name);
             }
-            backupModels.push(info);
+        }
+
+        if (errors.length > 0) {
+            response.set('X-Backup-Errors', encodeURIComponent(JSON.stringify(errors)));
+        }
+
+        if (request.body?.withErrors) {
+            return response.json({ backups: backupModels, errors });
         }
 
         return response.json(backupModels);

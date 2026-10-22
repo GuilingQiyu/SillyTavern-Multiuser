@@ -215,7 +215,8 @@ async function seedGlobalContent(contentIndex) {
 export async function checkForNewContent(directoriesList, forceCategories = []) {
     try {
         const contentCheckSkip = getConfigValue('skipContentCheck', false, 'boolean');
-        if (contentCheckSkip && forceCategories?.length === 0) {
+        const hasUninitializedUser = directoriesList.some(d => !fs.existsSync(path.join(d.root, 'content.log')));
+        if (contentCheckSkip && forceCategories?.length === 0 && !hasUninitializedUser) {
             return;
         }
 
@@ -229,6 +230,10 @@ export async function checkForNewContent(directoriesList, forceCategories = []) 
         }
 
         for (const directories of directoriesList) {
+            const isNewUser = !fs.existsSync(path.join(directories.root, 'content.log'));
+            if (contentCheckSkip && forceCategories?.length === 0 && !isNewUser) {
+                continue;
+            }
             const userSeedResult = await seedContentForUser(userContentIndex, directories, forceCategories);
 
             if (userSeedResult) {

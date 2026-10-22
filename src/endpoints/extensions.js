@@ -111,11 +111,11 @@ router.post('/install', async (request, response) => {
 
         // make sure the third-party directory exists
         if (!fs.existsSync(path.join(request.user.directories.extensions))) {
-            fs.mkdirSync(path.join(request.user.directories.extensions));
+            fs.mkdirSync(path.join(request.user.directories.extensions), { recursive: true });
         }
 
         if (!fs.existsSync(PUBLIC_DIRECTORIES.globalExtensions)) {
-            fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions);
+            fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions, { recursive: true });
         }
 
         const basePath = global ? PUBLIC_DIRECTORIES.globalExtensions : request.user.directories.extensions;
@@ -479,11 +479,11 @@ router.post('/delete', async (request, response) => {
  */
 router.get('/discover', function (request, response) {
     if (!fs.existsSync(path.join(request.user.directories.extensions))) {
-        fs.mkdirSync(path.join(request.user.directories.extensions));
+        fs.mkdirSync(path.join(request.user.directories.extensions), { recursive: true });
     }
 
     if (!fs.existsSync(PUBLIC_DIRECTORIES.globalExtensions)) {
-        fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions);
+        fs.mkdirSync(PUBLIC_DIRECTORIES.globalExtensions, { recursive: true });
     }
 
     /**

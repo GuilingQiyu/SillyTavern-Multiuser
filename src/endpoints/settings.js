@@ -8,7 +8,8 @@ import bytes from 'bytes';
 
 import { SETTINGS_FILE } from '../constants.js';
 import { getConfigValue, generateTimestamp, removeOldBackups } from '../util.js';
-import { getAllUserHandles, getUserDirectories } from '../users.js';
+import { getAllUserHandles, getUserDirectories, ensureUserDirectoriesExist } from '../users.js';
+import { checkForNewContent, CONTENT_TYPES } from './content-manager.js';
 import { getFileNameValidationFunction } from '../middleware/validateFileName.js';
 
 const ENABLE_EXTENSIONS = !!getConfigValue('extensions.enabled', true, 'boolean');
@@ -216,10 +217,14 @@ router.post('/save', function (request, response) {
 });
 
 // Wintermute's code
-router.post('/get', (request, response) => {
+router.post('/get', async (request, response) => {
     let settings;
     try {
         const pathToSettings = path.join(request.user.directories.root, SETTINGS_FILE);
+        if (!fs.existsSync(pathToSettings)) {
+            ensureUserDirectoriesExist(request.user.profile.handle);
+            await checkForNewContent([request.user.directories], [CONTENT_TYPES.SETTINGS, CONTENT_TYPES.THEME, CONTENT_TYPES.CHARACTER, CONTENT_TYPES.WORLD, CONTENT_TYPES.SPRITES]);
+        }
         settings = fs.readFileSync(pathToSettings, 'utf8');
     } catch (e) {
         return response.sendStatus(500);
@@ -286,6 +291,15 @@ router.post('/get', (request, response) => {
         enable_extensions: ENABLE_EXTENSIONS,
         enable_extensions_auto_update: ENABLE_EXTENSIONS_AUTO_UPDATE,
         enable_accounts: ENABLE_ACCOUNTS,
+        community_prompt: (() => {
+            const enabled = !!getConfigValue('communityPrompt.enabled', false, 'boolean');
+            return {
+                enabled,
+                loginJumpUrl: enabled ? String(getConfigValue('communityPrompt.loginJumpUrl', '') ?? '').trim() : '',
+                popupMessage: enabled ? String(getConfigValue('communityPrompt.popupMessage', '') ?? '').trim() : '',
+                errorContactPrompt: enabled ? String(getConfigValue('communityPrompt.errorContactPrompt', '') ?? '').trim() : '',
+            };
+        })(),
         request_compression: {
             enabled: ENABLE_REQUEST_COMPRESSION,
             minPayloadSize: REQUEST_COMPRESSION_MIN || 0,

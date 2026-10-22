@@ -237,9 +237,15 @@ app.get('/login', loginPageMiddleware);
 
 // Host frontend assets
 const webpackMiddleware = getWebpackServeMiddleware();
+const publicStaticMiddleware = express.static(path.join(serverDirectory, 'public'), {});
 app.use(webpackMiddleware);
 app.use(userCssMiddleware);
-app.use(express.static(path.join(serverDirectory, 'public'), {}));
+app.use((req, res, next) => {
+    if (req.path.startsWith('/scripts/extensions/third-party/')) {
+        return next();
+    }
+    return publicStaticMiddleware(req, res, next);
+});
 
 // Public API
 app.use('/api/users', usersPublicRouter);

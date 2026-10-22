@@ -1815,6 +1815,13 @@ export async function loadPowerUserSettings(settings, data) {
     loadMovingUIState();
     loadCharListState();
     toggleMDHotkeyIconDisplay();
+
+    // New accounts often set only power_user.theme in settings; apply it once on first run
+    // so theme colors/custom CSS are materialized without requiring manual theme toggling.
+    if (settings.firstRun && power_user.theme && themes.some(t => t.name === power_user.theme)) {
+        applyTheme(power_user.theme);
+    }
+
     applyToastrPosition();
 }
 
