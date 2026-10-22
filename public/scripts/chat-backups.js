@@ -164,7 +164,7 @@ class BackupsBrowser {
 
         if (!response.ok) {
             console.error('Failed to load chat backups list:', response.statusText);
-            toastr.error(`${t`无法加载聊天备份列表。`}${contactSuffix}`, t`备份加载失败`);
+            toastr.error(`${t`Failed to load chat backups list.`}${contactSuffix}`, t`Backup load failed`);
             return;
         }
 
@@ -183,7 +183,7 @@ class BackupsBrowser {
 
         if (errors?.length) {
             console.error('[备份] 以下文件无法读取：', errors);
-            toastr.error(`${t`${errors.length} 个备份文件无法读取，已跳过。`}${contactSuffix}`, t`备份读取失败`);
+            toastr.error(`${t`${errors.length} backup file(s) could not be read and were skipped.`}${contactSuffix}`, t`Backup read failed`);
         }
 
         for (const backup of backupsList.sort((a, b) => sortMoments(timestampToMoment(a.last_mes), timestampToMoment(b.last_mes)))) {

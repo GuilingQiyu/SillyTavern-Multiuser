@@ -5,8 +5,212 @@ import { initAccessibility } from './a11y.js';
  */
 let csrfToken = '';
 let errorContactPrompt = '';
+let loginCaptchaRequired = false;
 const PANEL_ANIM_MS = 220;
 const VALID_HANDLE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/;
+const TURNSTILE_SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+
+/** @type {Record<string, string>} */
+let loginLocaleData = {};
+let activeLocale = 'zh-cn';
+
+/**
+ * Cloudflare Turnstile runtime state.
+ */
+let turnstileConfig = {
+    enabled: false,
+    siteKey: '',
+};
+/** @type {Promise<void>|null} */
+let turnstileScriptPromise = null;
+/** @type {string|null} */
+let loginTurnstileWidgetId = null;
+/** @type {string|null} */
+let regTurnstileWidgetId = null;
+let loginTurnstileToken = '';
+let regTurnstileToken = '';
+
+/**
+ * Translates a key using the loaded locale dictionary, or falls back to the English key itself.
+ * @param {string} key English translation key
+ * @returns {string}
+ */
+function translate(key) {
+    if (!key) {
+        return '';
+    }
+    if (activeLocale.startsWith('en')) {
+        return key;
+    }
+    return loginLocaleData?.[key] || key;
+}
+
+/**
+ * Tagged template literal helper matching SillyTavern's `t` function.
+ * @param {TemplateStringsArray} strings
+ * @param  {...any} values
+ * @returns {string}
+ */
+function t(strings, ...values) {
+    const str = strings.reduce((result, string, i) => result + string + (values[i] !== undefined ? `\${${i}}` : ''), '');
+    const translatedStr = translate(str);
+    return translatedStr.replace(/\$\{(\d+)\}/g, (_match, index) => values[index]);
+}
+
+/**
+ * Translates a DOM element with `data-i18n` attributes (supports `[attr]Key` and plain text keys).
+ * @param {Element} element
+ */
+function translateElement(element) {
+    const rawAttr = element.getAttribute('data-i18n');
+    if (!rawAttr) {
+        return;
+    }
+    const keys = rawAttr.split(';');
+    for (const key of keys) {
+        const attributeMatch = key.match(/^\[(\S+)\](.+)$/);
+        if (attributeMatch) {
+            const attrName = attributeMatch[1];
+            const lookupKey = attributeMatch[2];
+            const localizedValue = translate(lookupKey);
+            if (localizedValue) {
+                element.setAttribute(attrName, localizedValue);
+            }
+        } else {
+            const localizedValue = translate(key);
+            if (localizedValue) {
+                element.textContent = localizedValue;
+            }
+        }
+    }
+}
+
+/**
+ * Loads the locale dictionary for the login page and translates all `[data-i18n]` elements.
+ * @param {string} [defaultLang='zh-cn']
+ */
+async function initLoginLocales(defaultLang = 'zh-cn') {
+    const storedLang = localStorage.getItem('language');
+    const rawLang = String(storedLang || defaultLang || navigator.language || 'zh-cn').toLowerCase();
+
+    try {
+        const langsResponse = await fetch('/locales/lang.json');
+        const langs = langsResponse.ok ? await langsResponse.json() : [];
+        const exactMatch = Array.isArray(langs) ? langs.find(x => x.lang === rawLang) : null;
+        if (exactMatch) {
+            activeLocale = exactMatch.lang;
+        } else if (rawLang.startsWith('zh-tw') || rawLang.startsWith('zh-hk') || rawLang.startsWith('zh-hant')) {
+            activeLocale = 'zh-tw';
+        } else if (rawLang.startsWith('zh')) {
+            activeLocale = 'zh-cn';
+        } else if (rawLang.startsWith('en')) {
+            activeLocale = 'en';
+        } else {
+            activeLocale = defaultLang || 'zh-cn';
+        }
+
+        document.documentElement.lang = activeLocale;
+
+        if (!activeLocale.startsWith('en')) {
+            const localeResponse = await fetch(`/locales/${activeLocale}.json`);
+            if (localeResponse.ok) {
+                loginLocaleData = await localeResponse.json();
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load login locale data:', error);
+    }
+
+    document.querySelectorAll('[data-i18n]').forEach(el => translateElement(el));
+}
+
+/**
+ * Dynamically loads the Cloudflare Turnstile script when Turnstile is enabled.
+ * @returns {Promise<void>}
+ */
+function loadTurnstileScript() {
+    if (window.turnstile) {
+        return Promise.resolve();
+    }
+    if (turnstileScriptPromise) {
+        return turnstileScriptPromise;
+    }
+
+    turnstileScriptPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = TURNSTILE_SCRIPT_URL;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => {
+            turnstileScriptPromise = null;
+            reject(new Error(t`Failed to load Turnstile widget, please check your network connection`));
+        };
+        document.head.appendChild(script);
+    });
+
+    return turnstileScriptPromise;
+}
+
+/**
+ * Renders or resets the Cloudflare Turnstile widget for either 'login' or 'register'.
+ * @param {'login'|'register'} mode
+ */
+async function ensureTurnstileWidget(mode) {
+    if (!turnstileConfig.enabled || !turnstileConfig.siteKey) {
+        return;
+    }
+
+    try {
+        await loadTurnstileScript();
+        if (!window.turnstile) {
+            return;
+        }
+
+        if (mode === 'login') {
+            loginTurnstileToken = '';
+            if (loginTurnstileWidgetId !== null) {
+                window.turnstile.reset(loginTurnstileWidgetId);
+            } else {
+                loginTurnstileWidgetId = window.turnstile.render('#loginTurnstileContainer', {
+                    sitekey: turnstileConfig.siteKey,
+                    theme: 'dark',
+                    callback: (token) => {
+                        loginTurnstileToken = String(token ?? '');
+                    },
+                    'expired-callback': () => {
+                        loginTurnstileToken = '';
+                    },
+                    'error-callback': () => {
+                        loginTurnstileToken = '';
+                    },
+                });
+            }
+        } else if (mode === 'register') {
+            regTurnstileToken = '';
+            if (regTurnstileWidgetId !== null) {
+                window.turnstile.reset(regTurnstileWidgetId);
+            } else {
+                regTurnstileWidgetId = window.turnstile.render('#regTurnstileContainer', {
+                    sitekey: turnstileConfig.siteKey,
+                    theme: 'dark',
+                    callback: (token) => {
+                        regTurnstileToken = String(token ?? '');
+                    },
+                    'expired-callback': () => {
+                        regTurnstileToken = '';
+                    },
+                    'error-callback': () => {
+                        regTurnstileToken = '';
+                    },
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Turnstile initialization error:', error);
+        displayError(error?.message || t`Failed to load Turnstile widget, please check your network connection`);
+    }
+}
 
 /**
  * Gets a CSRF token from the server.
@@ -19,8 +223,8 @@ async function getCsrfToken() {
 }
 
 /**
- * Gets initial login state (captcha requirement, registration availability, and community prompt config) from the server.
- * @returns {Promise<{requireCaptcha?: boolean, enableUserRegistration?: boolean, communityPrompt?: {enabled?: boolean, loginJumpUrl?: string, errorContactPrompt?: string}}>}
+ * Gets initial login state (captcha requirement, registration availability, Turnstile, and community prompt config) from the server.
+ * @returns {Promise<{requireCaptcha?: boolean, enableUserRegistration?: boolean, defaultLanguage?: string, turnstile?: {enabled?: boolean, siteKey?: string}, communityPrompt?: {enabled?: boolean, loginJumpUrl?: string, errorContactPrompt?: string}}>}
  */
 async function getLoginState() {
     try {
@@ -35,6 +239,10 @@ async function getLoginState() {
 }
 
 async function refreshCaptcha(imgId) {
+    if (turnstileConfig.enabled) {
+        await ensureTurnstileWidget(imgId === 'loginCaptchaImage' ? 'login' : 'register');
+        return;
+    }
     const timestamp = new Date().getTime();
     $(`#${imgId}`).attr('src', `/api/users/captcha?t=${timestamp}`);
 }
@@ -82,11 +290,11 @@ function toggleRegister() {
     const isRegistering = $('#registerBlock').is(':visible');
     if (isRegistering) {
         swapBlocks(['#registerBlock', '#passwordRecoveryBlock'], ['#handleEntryBlock', '#passwordEntryBlock']);
-        $('#discreetLoginPrompt').text('使用用户句柄登录');
+        $('#discreetLoginPrompt').attr('data-i18n', 'Sign in with User Handle').text(t`Sign in with User Handle`);
         displayError('');
     } else {
         swapBlocks(['#handleEntryBlock', '#passwordEntryBlock', '#passwordRecoveryBlock'], ['#registerBlock']);
-        $('#discreetLoginPrompt').text('创建账户');
+        $('#discreetLoginPrompt').attr('data-i18n', 'Create Account').text(t`Create Account`);
         refreshCaptcha('regCaptchaImage');
         displayError('');
     }
@@ -98,16 +306,24 @@ async function performRegister() {
     const confirmPassword = String($('#regPasswordConfirm').val() ?? '');
     const captcha = String($('#regCaptcha').val() ?? '').trim();
 
-    if (!handle || !password || !confirmPassword || !captcha) {
-        return displayError('请填写所有字段');
+    if (!handle || !password || !confirmPassword) {
+        return displayError(t`Please fill in all required fields`);
+    }
+
+    if (turnstileConfig.enabled) {
+        if (!regTurnstileToken) {
+            return displayError(t`Please complete the Turnstile verification`);
+        }
+    } else if (!captcha) {
+        return displayError(t`Please fill in all required fields`);
     }
 
     if (!VALID_HANDLE_REGEX.test(handle)) {
-        return displayError('用户名只能包含字母、数字、下划线或连字符，且需以字母或数字开头（1-32位）');
+        return displayError(t`User handle can only contain letters, numbers, underscores, or hyphens, and must start with a letter or number (1-32 characters)`);
     }
 
     if (password !== confirmPassword) {
-        return displayError('密码不匹配');
+        return displayError(t`Passwords do not match`);
     }
 
     try {
@@ -117,14 +333,19 @@ async function performRegister() {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': csrfToken,
             },
-            body: JSON.stringify({ handle, password, captcha }),
+            body: JSON.stringify({
+                handle,
+                password,
+                captcha,
+                turnstileToken: turnstileConfig.enabled ? regTurnstileToken : undefined,
+            }),
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             refreshCaptcha('regCaptchaImage');
             $('#regCaptcha').val('');
-            return displayError(errorData.error || '注册失败，请重试', response.status >= 500);
+            return displayError(errorData.error || t`Registration failed, please try again`, response.status >= 500);
         }
 
         const data = await response.json();
@@ -146,7 +367,7 @@ async function performRegister() {
 async function sendRecoveryPart1(handle) {
     const cleanHandle = String(handle ?? '').trim();
     if (!cleanHandle) {
-        return displayError('请先输入用户句柄(用户名)');
+        return displayError(t`Please enter your user handle first`);
     }
 
     const response = await fetch('/api/users/recover-step1', {
@@ -160,14 +381,14 @@ async function sendRecoveryPart1(handle) {
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return displayError(errorData.error || '请求恢复码失败', response.status >= 500);
+        return displayError(errorData.error || t`Failed to request recovery code`, response.status >= 500);
     }
 
     showRecoveryBlock();
 }
 
 /**
- * Sets a new password for the user using the recovery code.
+ * Sends the recovery code and new password to the server.
  * @param {string} handle User handle
  * @param {string} code Recovery code
  * @param {string} newPassword New password
@@ -177,7 +398,7 @@ async function sendRecoveryPart2(handle, code, newPassword) {
     const cleanHandle = String(handle ?? '').trim();
     const cleanCode = String(code ?? '').trim();
     if (!cleanHandle || !cleanCode) {
-        return displayError('请填写用户名和恢复码');
+        return displayError(t`Please enter your user handle and recovery code`);
     }
 
     const recoveryData = {
@@ -197,7 +418,7 @@ async function sendRecoveryPart2(handle, code, newPassword) {
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return displayError(errorData.error || '密码恢复失败', response.status >= 500);
+        return displayError(errorData.error || t`Password recovery failed`, response.status >= 500);
     }
 
     console.log(`Successfully recovered password for ${cleanHandle}!`);
@@ -205,22 +426,32 @@ async function sendRecoveryPart2(handle, code, newPassword) {
 }
 
 /**
- * Attempts to log in the user.
- * @param {string} handle User's handle
- * @param {string} password User's password
+ * Logs the user in with the given handle and password.
+ * @param {string} handle User handle
+ * @param {string} password Password
  * @returns {Promise<void>}
  */
 async function performLogin(handle, password) {
     const cleanHandle = String(handle ?? '').trim();
     if (!cleanHandle) {
-        return displayError('请输入用户句柄(用户名)');
+        return displayError(t`Please enter your user handle`);
     }
 
     const captcha = String($('#loginCaptcha').val() ?? '').trim();
+    if (loginCaptchaRequired) {
+        if (turnstileConfig.enabled && !loginTurnstileToken) {
+            return displayError(t`Please complete the Turnstile verification`);
+        }
+        if (!turnstileConfig.enabled && !captcha) {
+            return displayError(t`Please enter the verification code`);
+        }
+    }
+
     const userInfo = {
         handle: cleanHandle,
         password: password,
         captcha: captcha,
+        turnstileToken: turnstileConfig.enabled ? loginTurnstileToken : undefined,
     };
 
     try {
@@ -237,12 +468,13 @@ async function performLogin(handle, password) {
             const errorData = await response.json().catch(() => ({}));
 
             if (errorData.requireCaptcha) {
+                loginCaptchaRequired = true;
                 showFlexBlock('#loginCaptchaBlock');
                 refreshCaptcha('loginCaptchaImage');
                 $('#loginCaptcha').val('');
             }
 
-            return displayError(errorData.error || '登录失败，请检查用户名和密码', response.status >= 500);
+            return displayError(errorData.error || t`Login failed, please check your user handle and password`, response.status >= 500);
         }
 
         const data = await response.json();
@@ -258,8 +490,8 @@ async function performLogin(handle, password) {
 }
 
 /**
- * Displays an error message to the user.
- * @param {string} message Error message
+ * Displays a localized error message to the user.
+ * @param {string} message Error message or i18n key
  * @param {boolean} [appendContact=false] Whether to append the configured errorContactPrompt
  */
 function displayError(message, appendContact = false) {
@@ -267,29 +499,18 @@ function displayError(message, appendContact = false) {
         $('#errorMessage').text('');
         return;
     }
+    const localizedMessage = translate(message);
     const finalMessage = (appendContact && errorContactPrompt)
-        ? `${message}（${errorContactPrompt}）`
-        : message;
+        ? `${localizedMessage}（${errorContactPrompt}）`
+        : localizedMessage;
     $('#errorMessage').text(finalMessage);
 }
 
 /**
  * Redirects the user to the home page.
- * Preserves the query string.
  */
 function redirectToHome() {
-    // Create a URL object based on the current location
-    const currentUrl = new URL(window.location.href);
-
-    // After a login there's no need to preserve the
-    // noauto parameter (if present)
-    currentUrl.searchParams.delete('noauto');
-
-    // Set the pathname to root and keep the updated query string
-    currentUrl.pathname = '/';
-
-    // Redirect to the new URL
-    window.location.href = currentUrl.toString();
+    window.location.href = '/';
 }
 
 /**
@@ -297,7 +518,7 @@ function redirectToHome() {
  */
 function showRecoveryBlock() {
     swapBlocks(['#passwordEntryBlock', '#registerBlock'], ['#passwordRecoveryBlock']);
-    $('#discreetLoginPrompt').text('找回密码');
+    $('#discreetLoginPrompt').attr('data-i18n', 'Password Recovery').text(t`Password Recovery`);
     displayError('');
 }
 
@@ -306,7 +527,7 @@ function showRecoveryBlock() {
  */
 function onCancelRecoveryClick() {
     swapBlocks(['#passwordRecoveryBlock'], ['#handleEntryBlock', '#passwordEntryBlock']);
-    $('#discreetLoginPrompt').text('使用用户句柄登录');
+    $('#discreetLoginPrompt').attr('data-i18n', 'Sign in with User Handle').text(t`Sign in with User Handle`);
     displayError('');
 }
 
@@ -349,6 +570,32 @@ function configureDiscreetLogin() {
 }
 
 /**
+ * Configures human verification UI (Cloudflare Turnstile vs built-in backend SVG captcha).
+ * @param {{enabled?: boolean, siteKey?: string}} [turnstile]
+ */
+function applyTurnstileConfig(turnstile) {
+    if (turnstile?.enabled && turnstile?.siteKey) {
+        turnstileConfig = {
+            enabled: true,
+            siteKey: String(turnstile.siteKey).trim(),
+        };
+        $('#loginSvgCaptchaRow').hide();
+        $('#regSvgCaptchaRow').hide();
+        $('#loginTurnstileContainer').show();
+        $('#regTurnstileContainer').show();
+    } else {
+        turnstileConfig = {
+            enabled: false,
+            siteKey: '',
+        };
+        $('#loginTurnstileContainer').hide();
+        $('#regTurnstileContainer').hide();
+        $('#loginSvgCaptchaRow').show();
+        $('#regSvgCaptchaRow').show();
+    }
+}
+
+/**
  * Applies optional community prompt settings from config.yaml.
  * @param {{enabled?: boolean, loginJumpUrl?: string, errorContactPrompt?: string}} [communityPrompt]
  */
@@ -367,8 +614,10 @@ function applyCommunityPromptConfig(communityPrompt) {
 
     errorContactPrompt = String(communityPrompt.errorContactPrompt ?? '').trim();
     if (errorContactPrompt) {
-        $('#recoverMessage').text(`目前仅支持管理员协助恢复，请向管理员索要恢复码（${errorContactPrompt}）`);
-        $('#recoveryCode').attr('placeholder', `恢复码（${errorContactPrompt}）`);
+        const baseRecoverMsg = t`Password recovery currently requires administrator assistance. Please contact the administrator for a recovery code.`;
+        const baseRecoverPlaceholder = t`Recovery code`;
+        $('#recoverMessage').text(`${baseRecoverMsg}（${errorContactPrompt}）`);
+        $('#recoveryCode').attr('placeholder', `${baseRecoverPlaceholder}（${errorContactPrompt}）`);
     }
 }
 
@@ -381,10 +630,13 @@ function applyCommunityPromptConfig(communityPrompt) {
     ]);
     csrfToken = token;
 
+    await initLoginLocales(loginState.defaultLanguage || 'zh-cn');
+
     // Force discreet login flow: do NOT request or display user list.
     // This prevents any call to /api/users/list from the login page and
     // always shows the handle + password inputs instead.
     configureDiscreetLogin();
+    applyTurnstileConfig(loginState.turnstile);
     applyCommunityPromptConfig(loginState.communityPrompt);
 
     if (loginState.enableUserRegistration === false) {
@@ -392,6 +644,7 @@ function applyCommunityPromptConfig(communityPrompt) {
     }
 
     if (loginState.requireCaptcha) {
+        loginCaptchaRequired = true;
         showFlexBlock('#loginCaptchaBlock');
         refreshCaptcha('loginCaptchaImage');
     }

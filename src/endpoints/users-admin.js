@@ -188,7 +188,7 @@ router.post('/create', requireAdminMiddleware, async (request, response) => {
 
         if (handles.some(x => x.toLowerCase() === handle.toLowerCase())) {
             console.warn('Create user failed: User with that handle already exists');
-            return response.status(409).json({ error: '用户已存在！' });
+            return response.status(409).json({ error: 'User already exists' });
         }
 
         const salt = getPasswordSalt();

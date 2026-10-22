@@ -9,7 +9,8 @@ LLM Frontend for Power Users — with Multi-User Registration, Security Hardenin
 1. **Multi-User Public Registration & Login Hardening**
    - Redesigned glassmorphic login, registration, and password recovery page (`public/login.html`, `public/css/login.css`, `public/scripts/login.js`), enforcing discreet handle login (`enableDiscreetLogin: true`) so the user list is never publicly exposed.
    - Added public self-registration (`POST /api/users/register`), configurable via `enableUserRegistration: true` in `config.yaml`, with handle format validation (`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`), case-insensitive duplicate checks, path traversal protection (`isPathUnderParent`), and IP rate limiting (`rateLimiting.accountsRegisterMaxAttempts`).
-   - Built-in single-use SVG CAPTCHA verification (`GET /api/users/captcha`) required for registration and automatically triggered after login failures.
+   - Built-in backend single-use SVG CAPTCHA verification (`GET /api/users/captcha`) required for registration and automatically triggered after login failures, plus an optional Cloudflare Turnstile verification hook (`turnstile.enabled`, `turnstile.siteKey`, `turnstile.secretKey` in `config.yaml`) validated server-side via Cloudflare `siteverify`.
+   - Extracted all authentication UI labels, placeholders, and frontend/backend error prompts into `public/locales/zh-cn.json` and `public/locales/zh-tw.json` via `data-i18n` and `t` localization.
 2. **Multi-User Isolation, Cache & Plugin Compatibility Fixes**
    - Fixed character `DiskCache` background synchronization (`src/endpoints/characters.js`) so background verification checks all user directories (`getUserDirectoriesList()`) rather than evicting other users' cached character cards.
    - Fixed third-party extension static routing (`src/server-main.js`, `src/users.js`, `src/endpoints/extensions.js`) so user-local extensions take precedence over global extensions of the same name and create directories recursively.
@@ -35,7 +36,8 @@ LLM Frontend for Power Users — with Multi-User Registration, Security Hardenin
 1. **多用户公开注册与登录安全加固**
    - 重构毛玻璃风格登录、注册与密码找回页面（`public/login.html`、`public/css/login.css`、`public/scripts/login.js`），默认启用隐蔽句柄登录（`enableDiscreetLogin: true`），不公开暴露用户列表。
    - 新增公开用户注册接口（`POST /api/users/register`），可通过 `config.yaml` 中的 `enableUserRegistration: true` 开关控制；支持用户名格式校验（`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`）、忽略大小写防重名、路径穿越防护（`isPathUnderParent`）及 IP 速率限制（`rateLimiting.accountsRegisterMaxAttempts`）。
-   - 内置一次性会话 SVG 图形验证码（`GET /api/users/captcha`），用于新用户注册校验并在登录失败后自动触发防爆破保护。
+   - 验证码生成与一次性核验均在后端完成（`src/endpoints/users-public.js`）：默认使用零外部依赖的后端 Session SVG 图形验证码（`GET /api/users/captcha`），同时支持在 `config.yaml` 中开启 Cloudflare Turnstile 人机验证（`turnstile.enabled`、`siteKey`、`secretKey`，由后端请求 Cloudflare `siteverify` 接口完成校验）。
+   - 认证页（登录、注册、找回密码）全部文案与前后端报错提示均已抽离至多语言字典（`public/locales/zh-cn.json` 与 `public/locales/zh-tw.json`），支持 `data-i18n` 与 `t` 动态多语言切换。
 2. **多用户隔离、缓存与插件兼容性修复**
    - 修复角色卡磁盘缓存 `DiskCache` 后台同步逻辑（`src/endpoints/characters.js`），传入全量用户目录列表（`getUserDirectoriesList()`），避免单用户修改角色时误清空其他在线用户的缓存。
    - 修复第三方扩展静态路由优先级（`src/server-main.js`、`src/users.js`、`src/endpoints/extensions.js`），使单用户私有安装的同名插件正确覆盖全局插件，并支持递归创建扩展目录。

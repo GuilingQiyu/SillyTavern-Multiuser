@@ -432,3 +432,12 @@ body.login #errorMessage {
         transition: none !important;
     }
 }
+
+.turnstile-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 65px;
+    margin: 4px 0;
+}

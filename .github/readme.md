@@ -20,7 +20,8 @@ English | [German](readme-de_de.md) | [中文](readme-zh_cn.md) | [繁體中文]
 1. **Multi-User Public Registration & Login Hardening**
    - Redesigned glassmorphic login, registration, and password recovery UI (`public/login.html`, `public/css/login.css`, `public/scripts/login.js`), defaulting to discreet handle login (`enableDiscreetLogin: true`) so the user list is never publicly exposed.
    - Added public self-registration (`POST /api/users/register`), configurable via `enableUserRegistration: true` in `config.yaml`, with handle format validation (`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`), case-insensitive duplicate checks, path traversal protection (`isPathUnderParent`), and IP rate limiting (`rateLimiting.accountsRegisterMaxAttempts`).
-   - Built-in single-use SVG CAPTCHA verification (`GET /api/users/captcha`) required for registration and automatically triggered after login failures.
+   - Built-in backend single-use SVG CAPTCHA verification (`GET /api/users/captcha`) required for registration and automatically triggered after login failures, plus an optional Cloudflare Turnstile verification hook (`turnstile.enabled`, `turnstile.siteKey`, `turnstile.secretKey` in `config.yaml`) validated server-side via Cloudflare `siteverify`.
+   - Extracted all authentication UI labels, placeholders, and frontend/backend error prompts into `public/locales/zh-cn.json` and `public/locales/zh-tw.json` via `data-i18n` and `t` localization.
 2. **Multi-User Isolation, Cache & Plugin Compatibility Fixes**
    - Fixed character `DiskCache` background synchronization (`src/endpoints/characters.js`) so background verification checks all user directories (`getUserDirectoriesList()`) rather than evicting other users' cached character cards.
    - Fixed third-party extension static routing (`src/server-main.js`, `src/users.js`, `src/endpoints/extensions.js`) so user-local extensions take precedence over global extensions of the same name and create directories recursively.

@@ -119,6 +119,14 @@ communityPrompt:
   popupMessage: ""
   # 3. Error & recovery contact prompt shown on save/backup errors and password recovery (leave empty to hide)
   errorContactPrompt: ""
+# Optional Cloudflare Turnstile verification on login & registration (falls back to built-in backend SVG captcha when disabled)
+turnstile:
+  # Toggle switch to enable Cloudflare Turnstile instead of the built-in SVG captcha
+  enabled: false
+  # Cloudflare Turnstile widget Site Key (public key sent to the login page)
+  siteKey: ""
+  # Cloudflare Turnstile Secret Key (kept strictly on the backend for siteverify validation)
+  secretKey: ""
 # If `basicAuthMode` and this are enabled then
 # the username and passwords for basic auth are the same as those
 # for the individual accounts

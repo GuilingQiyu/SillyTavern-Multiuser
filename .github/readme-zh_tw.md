@@ -23,7 +23,8 @@
 1. **多使用者公開註冊與登入安全加固**
    - 重構毛玻璃風格登入、註冊與密碼找回頁面（`public/login.html`、`public/css/login.css`、`public/scripts/login.js`），預設啟用隱蔽控制代碼登入（`enableDiscreetLogin: true`），不公開暴露使用者列表。
    - 新增公開使用者註冊介面（`POST /api/users/register`），可透過 `config.yaml` 中的 `enableUserRegistration: true` 開關控制；支援使用者名稱格式校驗（`/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/`）、忽略大小寫防重名、路徑穿越防護（`isPathUnderParent`）及 IP 速率限制（`rateLimiting.accountsRegisterMaxAttempts`）。
-   - 內建一次性工作階段 SVG 圖形驗證碼（`GET /api/users/captcha`），用於新使用者註冊校驗並在登入失敗後自動觸發防爆破保護。
+   - 驗證碼生成與一次性核驗均在後端完成（`src/endpoints/users-public.js`）：預設使用零外部依賴的後端 Session SVG 圖形驗證碼（`GET /api/users/captcha`），同時支援在 `config.yaml` 中開啟 Cloudflare Turnstile 人機驗證（`turnstile.enabled`、`siteKey`、`secretKey`，由後端請求 Cloudflare `siteverify` 介面完成校驗）。
+   - 認證頁（登入、註冊、找回密碼）全部文案與前後端報錯提示均已抽離至多語言字典（`public/locales/zh-cn.json` 與 `public/locales/zh-tw.json`），支援 `data-i18n` 與 `t` 動態多語言切換。
 2. **多使用者隔離、快取與外掛相容性修復**
    - 修復角色卡磁碟快取 `DiskCache` 背景同步邏輯（`src/endpoints/characters.js`），傳入全量使用者目錄列表（`getUserDirectoriesList()`），避免單一使用者修改角色時誤清空其他線上使用者的快取。
    - 修復第三方擴充功能靜態路由優先順序（`src/server-main.js`、`src/users.js`、`src/endpoints/extensions.js`），使單一使用者私有安裝的同名外掛正確覆蓋全域外掛，並支援遞迴建立擴充目錄。
