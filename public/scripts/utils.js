@@ -1414,22 +1414,38 @@ export class Stopwatch {
 
         this.interval = interval;
         this.lastAction = Date.now();
+        this.lastDuration = 0;
     }
 
     /**
-     * Executes a function if the interval passed.
+     * Executes a function if the interval passed, automatically scaling the cooldown
+     * when the previous execution was expensive so the browser main thread and GC never starve.
      * @param {(arg0: any) => any} action Action function
+     * @param {number?} [dynamicInterval=null] Optional dynamic minimum interval override in ms
      * @returns Promise<void>
      */
-    async tick(action) {
+    async tick(action, dynamicInterval = null) {
+        const baseInterval = (typeof dynamicInterval === 'number' && dynamicInterval > 0)
+            ? Math.max(this.interval, dynamicInterval)
+            : this.interval;
+        const adaptiveInterval = Math.max(baseInterval, Math.min(600, this.lastDuration * 2.5));
         const passed = (Date.now() - this.lastAction);
 
-        if (passed < this.interval) {
+        if (passed < adaptiveInterval) {
             return;
         }
 
+        const start = Date.now();
         await action();
-        this.lastAction = Date.now();
+        const end = Date.now();
+        this.lastDuration = Math.max(0, end - start);
+        this.lastAction = end;
+
+        // When a frame took >= 16ms, yield a macrotask so mobile browsers (especially Firefox/Gecko)
+        // can process input events, layout, and incremental garbage collection.
+        if (this.lastDuration >= 16) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
     }
 }
 

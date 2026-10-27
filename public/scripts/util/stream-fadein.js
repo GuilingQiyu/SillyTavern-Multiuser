@@ -1,11 +1,61 @@
 import { morphdom } from '../../lib.js';
 
+/** Maximum HTML length before stream fade-in segmentation falls back to incremental block diffing to prevent mobile OOM */
+const MAX_FADEIN_HTML_LENGTH = 2000;
+
 /**
  * Check if the current browser supports native segmentation function.
  * @returns {boolean} True if the Segmenter is supported by the current browser.
  */
 export function isSegmenterSupported() {
     return typeof Intl.Segmenter === 'function';
+}
+
+/**
+ * Incrementally updates a container's top-level child nodes to match new HTML content.
+ * Preserves unchanged preceding paragraphs/blocks in the live DOM to avoid full-subtree
+ * teardown, layout thrashing, and GC pressure (especially on Mobile Firefox / Gecko) during long streams.
+ * @param {HTMLElement} container Target DOM element (e.g. .mes_text or .mes_reasoning)
+ * @param {string} htmlContent New HTML string to apply
+ */
+export function updateStreamingDomIncremental(container, htmlContent) {
+    if (!(container instanceof HTMLElement)) {
+        return;
+    }
+
+    if (!htmlContent) {
+        if (container.firstChild) {
+            container.innerHTML = '';
+        }
+        return;
+    }
+
+    const template = document.createElement('template');
+    template.innerHTML = htmlContent;
+    const newNodes = Array.from(template.content.childNodes);
+    const oldNodes = container.childNodes;
+
+    let i = 0;
+    const minLen = Math.min(oldNodes.length, newNodes.length);
+
+    // Keep all identical leading top-level blocks untouched in the live DOM
+    while (i < minLen && oldNodes[i].isEqualNode(newNodes[i])) {
+        i++;
+    }
+
+    // Remove trailing old nodes starting from the first diverging block
+    while (oldNodes.length > i) {
+        container.removeChild(container.lastChild);
+    }
+
+    // Append new/updated trailing blocks in a single DocumentFragment
+    if (i < newNodes.length) {
+        const fragment = document.createDocumentFragment();
+        for (let j = i; j < newNodes.length; j++) {
+            fragment.appendChild(newNodes[j]);
+        }
+        container.appendChild(fragment);
+    }
 }
 
 /**
@@ -59,10 +109,15 @@ export function segmentTextInElement(htmlElement, htmlContent, granularity = 'wo
 
 /**
  * Apply stream fade-in effect to the given message text element by morphing its content.
+ * Automatically falls back to incremental block updates on long responses to prevent span node explosion.
  * @param {HTMLElement} messageTextElement Message text element
  * @param {string} htmlContent New HTML content to apply
  */
 export function applyStreamFadeIn(messageTextElement, htmlContent) {
+    if (htmlContent && htmlContent.length > MAX_FADEIN_HTML_LENGTH) {
+        updateStreamingDomIncremental(messageTextElement, htmlContent);
+        return;
+    }
     const targetElement = /** @type {HTMLElement} */ (messageTextElement.cloneNode());
     segmentTextInElement(targetElement, htmlContent);
     morphdom(messageTextElement, targetElement);

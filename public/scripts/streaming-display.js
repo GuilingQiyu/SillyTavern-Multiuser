@@ -21,6 +21,7 @@
 import { SVGInject } from '../lib.js';
 import { t } from './i18n.js';
 import { animation_duration, messageFormatting } from '/script.js';
+import { updateStreamingDomIncremental } from './util/stream-fadein.js';
 
 /** CSS class prefix */
 const CSS_PREFIX = 'streaming-display';
@@ -67,6 +68,10 @@ export class StreamingDisplay {
     #isStopped = false;
     /** @type {ReturnType<typeof setTimeout> | null} */
     #hideTimeoutId = null;
+    /** @type {string | null} */
+    #lastReasoningText = null;
+    /** @type {string | null} */
+    #lastContentText = null;
 
     /**
      * Shows the streaming display panel.
@@ -260,9 +265,12 @@ export class StreamingDisplay {
      */
     updateReasoning(text) {
         if (!this.#reasoningContent || !this.#reasoningSection || !text) return this;
+        if (text === this.#lastReasoningText) return this;
 
+        this.#lastReasoningText = text;
         this.#reasoningSection.style.display = '';
-        this.#reasoningContent.innerHTML = messageFormatting(text, '', false, false, -1, {}, true);
+        const formatted = messageFormatting(text, '', false, false, -1, {}, true);
+        updateStreamingDomIncremental(this.#reasoningContent, formatted);
         this.#reasoningContent.scrollTop = this.#reasoningContent.scrollHeight;
         return this;
     }
@@ -275,10 +283,13 @@ export class StreamingDisplay {
      */
     updateContent(text) {
         if (!this.#textContent || !this.#textSection || !text) return this;
+        if (text === this.#lastContentText) return this;
 
+        this.#lastContentText = text;
         this.#hasContent = true;
         this.#textSection.style.display = '';
-        this.#textContent.innerHTML = messageFormatting(text, '', false, false, -1, {}, false);
+        const formatted = messageFormatting(text, '', false, false, -1, {}, false);
+        updateStreamingDomIncremental(this.#textContent, formatted);
         this.#textContent.scrollTop = this.#textContent.scrollHeight;
         return this;
     }
@@ -413,6 +424,8 @@ export class StreamingDisplay {
         this.#isComplete = false;
         this.#isStopped = false;
         this.#hideTimeoutId = null;
+        this.#lastReasoningText = null;
+        this.#lastContentText = null;
 
         if (instant) {
             el.remove();

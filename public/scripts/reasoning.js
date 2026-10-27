@@ -15,7 +15,7 @@ import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCom
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
-import { applyStreamFadeIn } from './util/stream-fadein.js';
+import { applyStreamFadeIn, updateStreamingDomIncremental } from './util/stream-fadein.js';
 import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
 
 /**
@@ -280,6 +280,18 @@ export class ReasoningHandler {
     #isParsingReasoning = false;
     /** @type {number?} When reasoning is being parsed manually, and the reasoning has ended, this will be the index at which the actual messages starts */
     #parsingReasoningMesStartIndex = null;
+    /** @type {string?} Last raw reasoning input before regex evaluation */
+    #lastRawReasoningInput = null;
+    /** @type {string?} Last regex-evaluated reasoning string */
+    #lastRegexedReasoning = null;
+    /** @type {string?} Last reasoning string rendered to the DOM */
+    #lastRenderedReasoning = null;
+    /** @type {ReasoningState?} Last reasoning state rendered to the DOM */
+    #lastRenderedState = null;
+    /** @type {ReasoningType?} Last reasoning type rendered to the DOM */
+    #lastRenderedType = null;
+    /** @type {number?} Last reasoning duration rendered to the DOM */
+    #lastRenderedDuration = undefined;
 
     /**
      * @param {Date?} [timeStarted=null] - When the generation started
@@ -371,6 +383,13 @@ export class ReasoningHandler {
         // Prefill main dom element, as message might not have been rendered yet
         this.messageDom = messageElement;
 
+        this.#lastRawReasoningInput = null;
+        this.#lastRegexedReasoning = null;
+        this.#lastRenderedReasoning = null;
+        this.#lastRenderedState = null;
+        this.#lastRenderedType = null;
+        this.#lastRenderedDuration = undefined;
+
         // Make sure reset correctly clears all relevant states
         if (reset) {
             this.state = this.#isHiddenReasoningModel ? ReasoningState.Thinking : ReasoningState.None;
@@ -382,7 +401,7 @@ export class ReasoningHandler {
             this.endTime = null;
         }
 
-        this.updateDom(messageId);
+        this.updateDom(messageId, { isFinal: true });
 
         if (power_user.reasoning.auto_expand && this.messageReasoningDetailsDom.dataset.hasContent === 'true') {
             this.messageReasoningDetailsDom.open = true;
@@ -425,8 +444,16 @@ export class ReasoningHandler {
         }
         const extra = chat[messageId].extra;
 
-        const reasoningChanged = extra.reasoning !== reasoning;
-        this.reasoning = getRegexedString(reasoning ?? '', regex_placement.REASONING);
+        const rawCandidate = reasoning ?? '';
+        if (rawCandidate === this.#lastRawReasoningInput || rawCandidate === this.#lastRegexedReasoning) {
+            this.reasoning = this.#lastRegexedReasoning ?? rawCandidate;
+        } else {
+            const regexed = getRegexedString(rawCandidate, regex_placement.REASONING);
+            this.#lastRawReasoningInput = rawCandidate;
+            this.#lastRegexedReasoning = regexed;
+            this.reasoning = regexed;
+        }
+        const reasoningChanged = extra.reasoning !== this.reasoning;
 
         this.type = (this.#isParsingReasoning || this.#parsingReasoningMesStartIndex) ? ReasoningType.Parsed : ReasoningType.Model;
 
@@ -549,55 +576,81 @@ export class ReasoningHandler {
             await eventSource.emit(event_types.STREAM_REASONING_DONE, this.reasoning, this.getDuration(), messageId, this.state);
         }
 
-        this.updateDom(messageId);
+        this.updateDom(messageId, { isFinal: true });
     }
 
     /**
      * Updates the reasoning UI elements for a message.
      *
      * Toggles the CSS class, updates states, reasoning message, and duration.
+     * Uses dirty-checking and incremental block updates during streaming to avoid redundant DOM rebuilds.
      *
      * @param {number} messageId - The ID of the message to update
+     * @param {Object} [options={}] - Render options
+     * @param {boolean} [options.isFinal=false] - Whether this is a final non-streaming render
      */
-    updateDom(messageId) {
+    updateDom(messageId, { isFinal = false } = {}) {
         this.#checkDomElements(messageId);
 
-        // Main CSS class to show this message includes reasoning
-        this.messageDom.classList.toggle('reasoning', this.state !== ReasoningState.None);
-
-        // Update states to the relevant DOM elements
-        setDatasetProperty(this.messageDom, 'reasoningState', this.state !== ReasoningState.None ? this.state : null);
-        setDatasetProperty(this.messageReasoningDetailsDom, 'state', this.state);
-        setDatasetProperty(this.messageReasoningDetailsDom, 'type', this.type);
-
-        // Update the reasoning message
         const rawReasoning = this.reasoningDisplayText ?? this.reasoning;
         const reasoning = trimSpaces(rawReasoning);
-        // Keep whitespace-only saved reasoning editable without showing it as visible content.
-        const hasStoredReasoning = Boolean(this.reasoningDisplayText || this.reasoning);
-        const hasReasoningContent = Boolean(String(rawReasoning ?? '').trim());
-        setDatasetProperty(this.messageReasoningDetailsDom, 'hasContent', hasReasoningContent ? 'true' : null);
-        const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
+        const duration = this.getDuration();
 
-        if (power_user.stream_fade_in) {
-            applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning);
-        } else {
-            this.messageReasoningContentDom.innerHTML = displayReasoning;
+        const contentChanged = reasoning !== this.#lastRenderedReasoning;
+        const stateChanged = this.state !== this.#lastRenderedState || this.type !== this.#lastRenderedType;
+        const durationChanged = duration !== this.#lastRenderedDuration;
+
+        if (!contentChanged && !stateChanged && !durationChanged && !isFinal) {
+            return;
         }
 
-        // Update tooltip for hidden reasoning edit
-        /** @type {HTMLElement} */
-        const button = this.messageDom.querySelector('.mes_edit_add_reasoning');
-        const isHiddenLikeReasoning = this.state === ReasoningState.Hidden || (hasStoredReasoning && !hasReasoningContent);
-        button.title = isHiddenLikeReasoning ? t`Hidden reasoning - Add reasoning block` : t`Add reasoning block`;
+        if (stateChanged || contentChanged || isFinal) {
+            // Main CSS class to show this message includes reasoning
+            this.messageDom.classList.toggle('reasoning', this.state !== ReasoningState.None);
 
-        // Make sure that hidden reasoning headers are collapsed by default, to not show a useless edit button
-        if (this.state === ReasoningState.Hidden) {
-            this.messageReasoningDetailsDom.open = false;
+            // Update states to the relevant DOM elements
+            setDatasetProperty(this.messageDom, 'reasoningState', this.state !== ReasoningState.None ? this.state : null);
+            setDatasetProperty(this.messageReasoningDetailsDom, 'state', this.state);
+            setDatasetProperty(this.messageReasoningDetailsDom, 'type', this.type);
+
+            // Keep whitespace-only saved reasoning editable without showing it as visible content.
+            const hasStoredReasoning = Boolean(this.reasoningDisplayText || this.reasoning);
+            const hasReasoningContent = Boolean(String(rawReasoning ?? '').trim());
+            setDatasetProperty(this.messageReasoningDetailsDom, 'hasContent', hasReasoningContent ? 'true' : null);
+
+            if (contentChanged || isFinal) {
+                const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
+
+                if (isFinal) {
+                    this.messageReasoningContentDom.innerHTML = displayReasoning;
+                } else if (power_user.stream_fade_in) {
+                    applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning);
+                } else {
+                    updateStreamingDomIncremental(this.messageReasoningContentDom, displayReasoning);
+                }
+                this.#lastRenderedReasoning = reasoning;
+            }
+
+            // Update tooltip for hidden reasoning edit
+            /** @type {HTMLElement} */
+            const button = this.messageDom.querySelector('.mes_edit_add_reasoning');
+            const isHiddenLikeReasoning = this.state === ReasoningState.Hidden || (hasStoredReasoning && !hasReasoningContent);
+            button.title = isHiddenLikeReasoning ? t`Hidden reasoning - Add reasoning block` : t`Add reasoning block`;
+
+            // Make sure that hidden reasoning headers are collapsed by default, to not show a useless edit button
+            if (this.state === ReasoningState.Hidden) {
+                this.messageReasoningDetailsDom.open = false;
+            }
+
+            this.#lastRenderedState = this.state;
+            this.#lastRenderedType = this.type;
         }
 
-        // Update the reasoning duration in the UI
-        this.#updateReasoningTimeUI();
+        if (stateChanged || durationChanged || isFinal) {
+            // Update the reasoning duration in the UI
+            this.#updateReasoningTimeUI();
+            this.#lastRenderedDuration = duration;
+        }
     }
 
     /**
@@ -609,6 +662,13 @@ export class ReasoningHandler {
         // Make sure we reset dom elements if we are checking for a different message (shouldn't happen, but be sure)
         if (this.messageDom !== null && this.messageDom.getAttribute('mesid') !== messageId.toString()) {
             this.messageDom = null;
+            this.messageReasoningDetailsDom = null;
+            this.messageReasoningContentDom = null;
+            this.messageReasoningHeaderDom = null;
+            this.#lastRenderedReasoning = null;
+            this.#lastRenderedState = null;
+            this.#lastRenderedType = null;
+            this.#lastRenderedDuration = undefined;
         }
 
         // Cache the DOM elements once

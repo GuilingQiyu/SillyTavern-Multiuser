@@ -30,6 +30,7 @@ LLM Frontend for Power Users — with Multi-User Registration, Security Hardenin
    - Included a Simplified Chinese default character card (`default_索菲娅.png`), matching lorebook (`艾尔多利亚.json`), and expression sprites (`索菲娅/`) alongside the English Seraphina card.
    - Added custom box themes (`盒子-浅色`, `盒子-深色`, `DefaultBoxTheme`) with automatic first-run theme initialization, default `zh-cn` locale, and OpenAI-compatible (`custom`) default API view.
    - Added `loading="lazy"` for chat media attachments, debounced mobile keyboard resize reflows, and exponential backoff auto-restart in `start.sh`.
+   - Optimized long streaming rendering (`mudev` branch: `public/script.js`, `public/scripts/reasoning.js`, `public/scripts/utils.js`, `public/scripts/util/stream-fadein.js`) with incremental top-level block DOM reconciliation (`updateStreamingDomIncremental`), reasoning regex/DOM dirty-checking, adaptive frame throttling with macrotask GC yields, and deferred `structuredClone(extra)` to prevent Mobile Firefox UI freezes and OOM tab reloads.
 
 ### 中文修改说明
 
@@ -57,6 +58,7 @@ LLM Frontend for Power Users — with Multi-User Registration, Security Hardenin
    - 在保留英文原版 `Seraphina` 的同时，默认提供中文版角色卡（`default_索菲娅.png`）、配套中文世界书（`艾尔多利亚.json`）及全套表情差分（`索菲娅/`）。
    - 内置三套盒子主题（`盒子-浅色`、`盒子-深色`、`DefaultBoxTheme`）并支持首次启动自动渲染生效；默认界面语言设为简体中文（`zh-cn`），默认 API 页面设为 OpenAI 兼容接口（`custom`）。
    - 为聊天图片附件启用 `loading="lazy"` 懒加载、为移动端软键盘弹出/收起添加 `resize` 防抖以消除长对话卡顿，并在 `start.sh` 中支持指数退避自动重启。
+   - 优化长回复流式渲染防卡死（`mudev` 分支：`public/script.js`、`public/scripts/reasoning.js`、`public/scripts/utils.js`、`public/scripts/util/stream-fadein.js`）：实现基于块级节点比对的增量 DOM 更新（`updateStreamingDomIncremental`）、思维链正则与 DOM 脏检查缓存、自适应动态降频与宏任务 GC 让出机制，并将 `structuredClone(extra)` 推迟至流式结束帧执行，解决移动端 Firefox 长流式回复卡死与 OOM 自动刷新问题。
 
 ## Resources
 

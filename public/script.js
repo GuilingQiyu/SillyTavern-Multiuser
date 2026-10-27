@@ -304,7 +304,7 @@ eventSource.on(event_types.SETTINGS_LOADED, async () => {
     }
 });
 
-import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
+import { applyStreamFadeIn, updateStreamingDomIncremental } from './scripts/util/stream-fadein.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { AudioPlayer } from './scripts/audio-player.js';
@@ -1875,9 +1875,16 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         }
 
         const regexPlacement = getRegexPlacement();
-        const usableMessages = chat.map((x, index) => ({ message: x, index: index })).filter(x => !x.message.is_system);
-        const indexOf = usableMessages.findIndex(x => x.index === Number(messageId));
-        const depth = messageId >= 0 && indexOf !== -1 ? (usableMessages.length - indexOf - 1) : undefined;
+        let depth = undefined;
+        const numericMesId = Number(messageId);
+        if (numericMesId >= 0 && numericMesId < chat.length && !chat[numericMesId]?.is_system) {
+            depth = 0;
+            for (let i = chat.length - 1; i > numericMesId; i--) {
+                if (!chat[i]?.is_system) {
+                    depth++;
+                }
+            }
+        }
 
         mes = MessageFormatter.runStage(MessageFormatter.stage.BEFORE_REGEX, mes,
             { ch_name, isSystem, isUser, messageId, isReasoning },
@@ -3611,6 +3618,10 @@ class StreamingProcessor {
         this.images = [];
         /** @type {string?} */
         this.reasoningSignature = null;
+        /** @type {string?} Cached last formatted raw message text to skip redundant formatting */
+        this.lastFormattedRawText = null;
+        /** @type {string?} Cached last raw reasoning from stream generator */
+        this.lastStreamReasoning = null;
     }
 
     /**
@@ -3732,28 +3743,36 @@ class StreamingProcessor {
 
             if ((this.type == 'swipe' || this.type === 'continue') && Array.isArray(chat[messageId].swipes)) {
                 chat[messageId].swipes[chat[messageId].swipe_id] = processedText;
-                chat[messageId].swipe_info[chat[messageId].swipe_id] = {
-                    'send_date': chat[messageId].send_date,
-                    'gen_started': chat[messageId].gen_started,
-                    'gen_finished': chat[messageId].gen_finished,
-                    'extra': structuredClone(chat[messageId].extra),
-                };
+                const existingSwipeInfo = chat[messageId].swipe_info[chat[messageId].swipe_id];
+                if (isFinal || !existingSwipeInfo) {
+                    chat[messageId].swipe_info[chat[messageId].swipe_id] = {
+                        'send_date': chat[messageId].send_date,
+                        'gen_started': chat[messageId].gen_started,
+                        'gen_finished': chat[messageId].gen_finished,
+                        'extra': structuredClone(chat[messageId].extra),
+                    };
+                } else {
+                    existingSwipeInfo.gen_finished = chat[messageId].gen_finished;
+                }
             }
 
-            const formattedText = messageFormatting(
-                processedText,
-                chat[messageId].name,
-                chat[messageId].is_system,
-                chat[messageId].is_user,
-                messageId,
-                {},
-                false,
-            );
-            if (this.messageTextDom instanceof HTMLElement) {
-                if (power_user.stream_fade_in) {
+            if (this.messageTextDom instanceof HTMLElement && (isFinal || processedText !== this.lastFormattedRawText)) {
+                this.lastFormattedRawText = processedText;
+                const formattedText = messageFormatting(
+                    processedText,
+                    chat[messageId].name,
+                    chat[messageId].is_system,
+                    chat[messageId].is_user,
+                    messageId,
+                    {},
+                    false,
+                );
+                if (isFinal) {
+                    this.messageTextDom.innerHTML = formattedText;
+                } else if (power_user.stream_fade_in) {
                     applyStreamFadeIn(this.messageTextDom, formattedText);
                 } else {
-                    this.messageTextDom.innerHTML = formattedText;
+                    updateStreamingDomIncremental(this.messageTextDom, formattedText);
                 }
             }
 
@@ -3763,7 +3782,7 @@ class StreamingProcessor {
                 this.messageTimerDom.title = timePassed.timerTitle;
             }
 
-            this.setFirstSwipe(messageId);
+            this.setFirstSwipe(messageId, isFinal);
         }
 
         if (!scrollLock) {
@@ -3858,16 +3877,21 @@ class StreamingProcessor {
         }
     }
 
-    setFirstSwipe(messageId) {
+    setFirstSwipe(messageId, isFinal = false) {
         if (this.type !== 'swipe' && this.type !== 'impersonate') {
             if (Array.isArray(chat[messageId].swipes) && chat[messageId].swipes.length === 1 && chat[messageId].swipe_id === 0) {
                 chat[messageId].swipes[0] = chat[messageId].mes;
-                chat[messageId].swipe_info[0] = {
-                    'send_date': chat[messageId].send_date,
-                    'gen_started': chat[messageId].gen_started,
-                    'gen_finished': chat[messageId].gen_finished,
-                    'extra': structuredClone(chat[messageId].extra),
-                };
+                const existingSwipeInfo = chat[messageId].swipe_info[0];
+                if (isFinal || !existingSwipeInfo) {
+                    chat[messageId].swipe_info[0] = {
+                        'send_date': chat[messageId].send_date,
+                        'gen_started': chat[messageId].gen_started,
+                        'gen_finished': chat[messageId].gen_finished,
+                        'extra': structuredClone(chat[messageId].extra),
+                    };
+                } else {
+                    existingSwipeInfo.gen_finished = chat[messageId].gen_finished;
+                }
             }
         }
     }
@@ -3898,7 +3922,9 @@ class StreamingProcessor {
         this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue, main_api);
 
         try {
-            const sw = new Stopwatch(1000 / power_user.streaming_fps);
+            const baseFrameInterval = 1000 / Math.max(1, power_user.streaming_fps || 30);
+            const sw = new Stopwatch(baseFrameInterval);
+            const isMobileFirefox = /Android|Mobile/i.test(navigator.userAgent) && /Firefox|FxiOS|Gecko\//i.test(navigator.userAgent);
             const timestamps = [];
             for await (const { text, swipes, logprobs, toolCalls, state } of this.generator()) {
                 const now = Date.now();
@@ -3916,12 +3942,26 @@ class StreamingProcessor {
                 if (logprobs) {
                     this.messageLogprobs.push(...(Array.isArray(logprobs) ? logprobs : [logprobs]));
                 }
-                // Get the updated reasoning string into the handler
-                this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
+                // Only re-evaluate reasoning when incoming stream reasoning actually changed
+                if (state?.reasoning !== undefined && state.reasoning !== this.lastStreamReasoning) {
+                    this.lastStreamReasoning = state.reasoning;
+                    this.reasoningHandler.updateReasoning(this.messageId, state.reasoning);
+                }
                 this.images = state?.images ?? [];
                 this.reasoningSignature = state?.signature ?? null;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
-                await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
+
+                const totalStreamedLength = (text?.length || 0) + (this.continueMessage?.length || 0) + (this.reasoningHandler.reasoning?.length || 0);
+                let dynamicInterval = baseFrameInterval;
+                if (totalStreamedLength > 8000) {
+                    dynamicInterval = Math.max(baseFrameInterval, isMobileFirefox ? 320 : 200);
+                } else if (totalStreamedLength > 4000) {
+                    dynamicInterval = Math.max(baseFrameInterval, isMobileFirefox ? 200 : 120);
+                } else if (totalStreamedLength > 1500) {
+                    dynamicInterval = Math.max(baseFrameInterval, isMobileFirefox ? 110 : 70);
+                }
+
+                await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text), dynamicInterval);
             }
             const seconds = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
             console.warn(`Stream stats: ${timestamps.length} tokens, ${seconds.toFixed(2)} seconds, rate: ${Number(timestamps.length / seconds).toFixed(2)} TPS`);

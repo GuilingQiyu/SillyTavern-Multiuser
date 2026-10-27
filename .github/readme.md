@@ -41,6 +41,7 @@ English | [German](readme-de_de.md) | [中文](readme-zh_cn.md) | [繁體中文]
    - Included a Simplified Chinese default character card (`default_索菲娅.png`), matching lorebook (`艾尔多利亚.json`), and expression sprites (`索菲娅/`) alongside the English Seraphina card.
    - Added custom box themes (`盒子-浅色`, `盒子-深色`, `DefaultBoxTheme`) with automatic first-run theme initialization, default `zh-cn` locale, and OpenAI-compatible (`custom`) default API view.
    - Added `loading="lazy"` for chat media attachments, debounced mobile keyboard resize reflows, and exponential backoff auto-restart in `start.sh`.
+   - Optimized long streaming rendering (`mudev` branch: `public/script.js`, `public/scripts/reasoning.js`, `public/scripts/utils.js`, `public/scripts/util/stream-fadein.js`) with incremental top-level block DOM reconciliation (`updateStreamingDomIncremental`), reasoning regex/DOM dirty-checking, adaptive frame throttling with macrotask GC yields, and deferred `structuredClone(extra)` to prevent Mobile Firefox UI freezes and OOM tab reloads.
 
 ---
 

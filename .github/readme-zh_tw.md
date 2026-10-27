@@ -44,6 +44,7 @@
    - 在保留英文原版 `Seraphina` 的同時，預設提供中文版角色卡（`default_索菲娅.png`）、配套中文世界書（`艾尔多利亚.json`）及全套表情差分（`索菲娅/`）。
    - 內建三套盒子主題（`盒子-浅色`、`盒子-深色`、`DefaultBoxTheme`）並支援首次啟動自動渲染生效；預設介面語言設為簡體中文（`zh-cn`），預設 API 頁面設為 OpenAI 相容介面（`custom`）。
    - 為聊天圖片附件啟用 `loading="lazy"` 懶載入、為行動裝置軟鍵盤彈出/收起添加 `resize` 防抖以消除長對話卡頓，並在 `start.sh` 中支援指數退避自動重啟。
+   - 最佳化長回覆串流渲染防卡死（`mudev` 分支：`public/script.js`、`public/scripts/reasoning.js`、`public/scripts/utils.js`、`public/scripts/util/stream-fadein.js`）：實作基於區塊節點比對的增量 DOM 更新（`updateStreamingDomIncremental`）、思維鏈正則與 DOM 髒檢查快取、自適應動態降頻與巨集任務 GC 讓出機制，並將 `structuredClone(extra)` 推遲至串流結束幀執行，解決行動端 Firefox 長串流回覆卡死與 OOM 自動重新整理問題。
 
 ---
 
